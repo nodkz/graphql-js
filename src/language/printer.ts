@@ -302,6 +302,18 @@ const printDocASTReducer: ASTReducer<string> = {
     leave: ({ name, directives, fields }) =>
       join(['extend input', name, join(directives, ' '), block(fields)], ' '),
   },
+
+  // Schema Coordinate
+
+  SchemaCoordinate: {
+    leave: ({ isDirective, name, memberName, argumentName }) =>
+      join([
+        isDirective && '@',
+        name,
+        wrap('.', memberName),
+        wrap('(', argumentName, ':)'),
+      ]),
+  },
 };
 
 /**
