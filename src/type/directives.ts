@@ -1,5 +1,6 @@
 import { inspect } from '../jsutils/inspect';
 import { toObjMap } from '../jsutils/toObjMap';
+import { keyValMap } from '../jsutils/keyValMap';
 import { devAssert } from '../jsutils/devAssert';
 import { instanceOf } from '../jsutils/instanceOf';
 import { isObjectLike } from '../jsutils/isObjectLike';
@@ -9,16 +10,13 @@ import type { DirectiveDefinitionNode } from '../language/ast';
 import type { DirectiveLocationEnum } from '../language/directiveLocation';
 import { DirectiveLocation } from '../language/directiveLocation';
 
-import type {
-  GraphQLArgument,
-  GraphQLFieldConfigArgumentMap,
-} from './definition';
-import { GraphQLString, GraphQLBoolean } from './scalars';
+import type { GraphQLFieldConfigArgumentMap } from './definition';
 import {
-  defineArguments,
-  argsToArgsConfig,
+  GraphQLArgument,
+  GraphQLSchemaElement,
   GraphQLNonNull,
 } from './definition';
+import { GraphQLString, GraphQLBoolean } from './scalars';
 
 /**
  * Test if the given value is a GraphQL directive.
@@ -53,7 +51,7 @@ export interface GraphQLDirectiveExtensions {
  * Directives are used by the GraphQL runtime as a way of modifying execution
  * behavior. Type system creators will usually not create these directly.
  */
-export class GraphQLDirective {
+export class GraphQLDirective extends GraphQLSchemaElement {
   name: string;
   description: Maybe<string>;
   locations: Array<DirectiveLocationEnum>;
@@ -63,6 +61,8 @@ export class GraphQLDirective {
   astNode: Maybe<DirectiveDefinitionNode>;
 
   constructor(config: Readonly<GraphQLDirectiveConfig>) {
+    const coordinate = `@${config.name}`;
+    super(coordinate);
     this.name = config.name;
     this.description = config.description;
     this.locations = config.locations;
@@ -73,16 +73,19 @@ export class GraphQLDirective {
     devAssert(config.name, 'Directive must be named.');
     devAssert(
       Array.isArray(config.locations),
-      `@${config.name} locations must be an Array.`,
+      `${coordinate} locations must be an Array.`,
     );
 
     const args = config.args ?? {};
     devAssert(
       isObjectLike(args) && !Array.isArray(args),
-      `@${config.name} args must be an object with argument names as keys.`,
+      `${coordinate} args must be an object with argument names as keys.`,
     );
 
-    this.args = defineArguments(args);
+    this.args = Object.entries(args).map(
+      ([argName, argConfig]) =>
+        new GraphQLArgument(coordinate, argName, argConfig),
+    );
   }
 
   toConfig(): GraphQLDirectiveNormalizedConfig {
@@ -90,19 +93,15 @@ export class GraphQLDirective {
       name: this.name,
       description: this.description,
       locations: this.locations,
-      args: argsToArgsConfig(this.args),
+      args: keyValMap(
+        this.args,
+        (arg) => arg.name,
+        (arg) => arg.toConfig(),
+      ),
       isRepeatable: this.isRepeatable,
       extensions: this.extensions,
       astNode: this.astNode,
     };
-  }
-
-  toString(): string {
-    return '@' + this.name;
-  }
-
-  toJSON(): string {
-    return this.toString();
   }
 
   get [Symbol.toStringTag]() {
